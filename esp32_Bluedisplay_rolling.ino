@@ -4,7 +4,7 @@
 #include <BlueDisplay.h>
 
 // Define the pin for the fuel injector signal
-#define INJECTOR_PIN 2
+#define INJECTOR_PIN 4
 
 // Define the constants for the display
 #define DISPLAY_WIDTH 320
