@@ -1,6 +1,4 @@
-Here is a possible code for your task. I have not tested it so it may not work as expected. Use it at your own risk.
 
-```c
 // Include the libraries for ESP32 and Bluedisplay
 #include <Arduino.h>
 #include <BlueDisplay.h>
