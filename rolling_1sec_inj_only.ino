@@ -89,7 +89,7 @@ void loop() {
     // Reset the fuel consumed variable for the next second
     fuel_consumed = 0;
     
-  
+  }
 }
 
 // Define a function to handle the injector signal interrupt
