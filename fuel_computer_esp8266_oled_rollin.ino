@@ -27,6 +27,7 @@
 
 
 // Declaration for SSD1306 display connected using software SPI (default case):
+/*
 #define OLED_MOSI   D7 
 #define OLED_CLK    D5
 #define OLED_DC     D2
@@ -34,6 +35,15 @@
 #define OLED_RESET  D3
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT,
   OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
+*/
+///*
+// Comment out above, uncomment this block to use hardware SPI
+#define OLED_DC     D2
+#define OLED_CS     D8
+#define OLED_RESET  D3
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT,
+  &SPI, OLED_DC, OLED_RESET, OLED_CS);
+//*/
 
 // Define the pin for the knob
 #define KNOB_PIN A0 // Analog pin for the knob
