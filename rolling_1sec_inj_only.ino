@@ -13,17 +13,16 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Define some constants for the fuel consumption calculation
-#define INJECTOR_CC 200 // Injector capacity in cc/min
-#define FUEL_DENSITY 0.75 // Fuel density in g/cc
-#define SECONDS_PER_HOUR 3600 // Number of seconds in an hour
+#define INJECTOR_FLOW_RATE_MLMIN 200.0 // Injector capacity in ml/min (same as cc/min)
+#define FUEL_DENSITY 0.75 // Fuel density in g/ml
 
 // Define some variables for the rolling graph
 int graph_x = 0; // The x position of the graph
 int graph_y = 0; // The y position of the graph
 int graph_width = SCREEN_WIDTH; // The width of the graph
-int graph_height = SCREEN_HEIGHT; // The height of the graph
+int graph_height = SCREEN_HEIGHT - 10; // Leave space for text
 int graph_max = 20; // The maximum value of the graph in g/s
-int graph_data[SCREEN_WIDTH]; // The array to store the graph data
+float graph_data[SCREEN_WIDTH]; // The array to store the graph data
 
 // Define some variables for the injector pulse measurement
 unsigned long pulse_start = 0; // The start time of the pulse in microseconds
@@ -43,7 +42,7 @@ void setup() {
   display.setTextColor(SSD1306_WHITE);
 
   // Draw a rectangle around the graph area
-  display.drawRect(graph_x, graph_y, graph_width, graph_height, SSDD1306_WHITE);
+  display.drawRect(graph_x, graph_y, graph_width, graph_height, SSD1306_WHITE);
 
   // Display the initial screen
   display.display();
@@ -66,7 +65,8 @@ void loop() {
     last_second = current_second;
 
     // Calculate the fuel consumption in grams per second
-    float fuel_consumption = fuel_consumed / SECONDS_PER_HOUR;
+    float fuel_consumption = fuel_consumed;
+    if (fuel_consumption < 0.001) fuel_consumption = 0;
 
     // Add the fuel consumption to the graph data array and shift it to the left
     for (int i = 0; i < graph_width - 1; i++) {
@@ -75,16 +75,28 @@ void loop() {
     graph_data[graph_width - 1] = fuel_consumption;
 
     // Clear the previous graph area
-    display.fillRect(graph_x + 1, graph_y + 1, graph_width -2 , graph_height -2 , SSD1306_BLACK);
+    display.clearDisplay();
 
     // Draw the new graph data as vertical lines
+    float max_val = 0.1;
+    for (int i = 0; i < graph_width; i++) if (graph_data[i] > max_val) max_val = graph_data[i];
+
     for (int i = 0; i < graph_width; i++) {
-      int line_height = map(graph_data[i], 0, graph_max, 0, graph_height);
+      int line_height = (int)((graph_data[i] / max_val) * graph_height);
       display.drawFastVLine(graph_x + i, graph_y + graph_height - line_height, line_height, SSD1306_WHITE);
     }
 
+    // Draw text value
+    display.setCursor(0, 0);
+    display.setTextColor(SSD1306_WHITE);
+    display.print("Fuel: ");
+    display.print(fuel_consumption, 3);
+    display.print(" g/s");
+
     // Display the updated screen
     display.display();
+
+    Serial.print("Fuel: "); Serial.println(fuel_consumption);
 
     // Reset the fuel consumed variable for the next second
     fuel_consumed = 0;
@@ -100,19 +112,21 @@ void injectorISR() {
 
     // If high, record the start time of the pulse
     pulse_start = micros();
-    
-  
-} else {
+
+  } else {
 
     // If low, record the end time of the pulse and calculate its width
     pulse_end = micros();
     pulse_width = pulse_end - pulse_start;
 
     // Calculate the fuel injected in grams based on the pulse width and injector capacity and density
-    float fuel_injected = (pulse_width / SECONDS_PER_HOUR) * (INJECTOR_CC / FUEL_DENSITY);
+    // INJECTOR_FLOW_RATE_MLMIN is ml/min. ml/sec = INJECTOR_FLOW_RATE_MLMIN / 60.
+    // g/sec = (INJECTOR_FLOW_RATE_MLMIN / 60) * FUEL_DENSITY
+    // pulse_width is in microseconds. fraction of second = pulse_width / 1,000,000
+    float fuel_injected = (pulse_width / 1000000.0) * (INJECTOR_FLOW_RATE_MLMIN / 60.0) * FUEL_DENSITY;
 
     // Add the fuel injected to the total fuel consumed variable 
     fuel_consumed += fuel_injected;
-    
-  
+
+  }
 }

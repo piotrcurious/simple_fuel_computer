@@ -15,7 +15,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define CAM_PIN 2 // cam position sensor pin
 #define INJ_PIN 3 // fuel injector signal pin
 #define PULSE_PER_REV 36 // number of pulses per camshaft revolution
-#define INJ_FLOW_RATE 0.1 // fuel injector flow rate in ml/ms
+#define INJECTOR_FLOW_RATE_MLMIN 200.0 // fuel injector flow rate in ml/min
 #define FUEL_DENSITY 0.75 // fuel density in g/ml
 #define GRAPH_HEIGHT 16 // height of the graph area in pixels
 #define GRAPH_WIDTH 128 // width of the graph area in pixels
@@ -27,19 +27,27 @@ volatile unsigned long inj_pulse_width = 0; // width of injector pulse in micros
 volatile unsigned long last_cam_time = 0; // last time a cam pulse was detected in microseconds
 volatile unsigned long last_inj_time = 0; // last time an injector pulse was detected in microseconds
 float rpm = 0; // engine speed in revolutions per minute
+float rpm_smoothed = 0; // smoothed engine speed
 float inj_duty_cycle = 0; // injector duty cycle in percentage
 float fuel_consumption = 0; // fuel consumption in g/s
+float fuel_smoothed = 0; // smoothed fuel consumption in g/s
 float graph_data[GRAPH_WIDTH]; // array to store the graph data
 
+unsigned long last_rev_time = 0;
 // interrupt service routine for cam pulse detection
 void camISR() {
   unsigned long current_time = micros(); // get the current time in microseconds
-  unsigned long cam_pulse_width = current_time - last_cam_time; // calculate the width of the cam pulse
-  last_cam_time = current_time; // update the last cam time
   cam_pulse_count++; // increment the cam pulse count
   if (cam_pulse_count == PULSE_PER_REV) { // if one revolution is completed
-    rpm = 60000000.0 / cam_pulse_width; // calculate the rpm
+    unsigned long rev_duration = current_time - last_rev_time;
+    if (rev_duration > 0) {
+      float instant_rpm = 60000000.0 / rev_duration; // calculate the rpm
+      rpm = instant_rpm; // raw RPM for quick calculations
+      // Exponential moving average for smoothing
+      rpm_smoothed = (rpm_smoothed * 0.7) + (instant_rpm * 0.3);
+    }
     cam_pulse_count = 0; // reset the cam pulse count
+    last_rev_time = current_time;
   }
 }
 
@@ -54,15 +62,35 @@ void injISR() {
   }
 }
 
+unsigned long last_calc_time = 0;
 // function to calculate the fuel consumption based on injector pulse width and rpm
 void calculateFuelConsumption() {
+  unsigned long current_time = micros();
+  unsigned long duration = current_time - last_calc_time;
+  if (duration == 0) return;
+
+  // Set RPM to 0 if no pulses for more than 2 seconds
+  if (current_time - last_rev_time > 2000000) {
+    rpm = 0;
+  }
+
   if (rpm > 0) { // if engine is running
-    inj_duty_cycle = (inj_pulse_width * PULSE_PER_REV) / (60000000.0 / rpm); // calculate the inj duty cycle in percentage
-    fuel_consumption = (inj_duty_cycle * INJ_FLOW_RATE * FUEL_DENSITY * rpm) / (60000.0 * PULSE_PER_REV); // calculate the fuel consumption in g/s 
+    inj_duty_cycle = (inj_pulse_width * 100.0) / duration; // calculate the inj duty cycle in percentage
+    // ml/sec = (inj_pulse_width / duration) * (INJECTOR_FLOW_RATE_MLMIN / 60.0)
+    // g/sec = ml/sec * FUEL_DENSITY
+    fuel_consumption = (inj_pulse_width / (float)duration) * (INJECTOR_FLOW_RATE_MLMIN / 60.0) * FUEL_DENSITY;
+    fuel_smoothed = (fuel_smoothed * 0.8) + (fuel_consumption * 0.2);
   } else { // if engine is not running
     inj_duty_cycle = 0; // set inj duty cycle to zero
     fuel_consumption = 0; // set fuel consumption to zero
+    // Faster decay for smoothed values when engine is off
+    fuel_smoothed = fuel_smoothed * 0.5;
+    if (fuel_smoothed < 0.001) fuel_smoothed = 0;
+    rpm_smoothed = rpm_smoothed * 0.5;
+    if (rpm_smoothed < 1) rpm_smoothed = 0;
   }
+  inj_pulse_width = 0;
+  last_calc_time = current_time;
 }
 
 // function to update the graph data array with the latest fuel consumption value and shift the previous values left by one pixel 
@@ -70,23 +98,22 @@ void updateGraphData() {
   for (int i = 0; i < GRAPH_WIDTH - 1; i++) { // for each pixel except the last one 
     graph_data[i] = graph_data[i + 1]; // shift the value left by one pixel 
   }
-  graph_data[GRAPH_WIDTH - 1] = fuel_consumption; // set the last pixel value to the latest fuel consumption value 
+  graph_data[GRAPH_WIDTH - 1] = fuel_smoothed; // use smoothed value for graph
 }
 
 // function to draw the graph on the display 
 void drawGraph() {
-  float max_value = graph_data[0]; // initialize max value with first value 
-  for (int i = 1; i < GRAPH_WIDTH; i++) { // for each pixel except the first one 
-    if (graph_data[i] > max_value) { // if value is greater than max value 
-      max_value = graph_data[i]; // update max value 
+  float max_value = 0.001;
+  for (int i = 0; i < GRAPH_WIDTH; i++) {
+    if (graph_data[i] > max_value) {
+      max_value = graph_data[i];
     }
   }
   
-  for (int i = GRAPH_WIDTH -1 ; i >=0 ; i--) { 
+  for (int i = 0 ; i < GRAPH_WIDTH ; i++) {
     int x = i;
-    int y = map(graph_data[i],0,max_value,SCREEN_HEIGHT-1,SCREEN_HEIGHT-GRAPH_HEIGHT); 
-    display.drawPixel(x,y,SSD1306_WHITE); 
-    display.drawLine(x,y,x,SCREEN_HEIGHT-1,SSD1306_WHITE); 
+    int bar_height = (int)((graph_data[i] / max_value) * GRAPH_HEIGHT);
+    display.drawFastVLine(x, SCREEN_HEIGHT - bar_height, bar_height, SSD1306_WHITE);
    }
 }
 
@@ -111,22 +138,29 @@ void setup() {
 
 }
 
+unsigned long last_loop_time = 0;
 void loop() {
-  
+   if (millis() - last_loop_time < 1000) return;
+   last_loop_time = millis();
+
    noInterrupts(); 
    calculateFuelConsumption(); 
    updateGraphData(); 
    interrupts(); 
   
+   Serial.print("RPM: "); Serial.print(rpm_smoothed);
+   Serial.print(" INJ: "); Serial.print(inj_duty_cycle);
+   Serial.print("% Fuel: "); Serial.println(fuel_smoothed);
+
    display.clearDisplay(); 
   
    display.setCursor(0,0); 
-   display.print("RPM: "); 
-   display.print(rpm); 
+   display.print("RPM:");
+   display.print((int)rpm_smoothed);
   
-   display.setCursor(64,0); 
-   display.print("INJ: "); 
-   display.print(inj_duty_cycle); 
+   display.setCursor(60,0);
+   display.print(" INJ:");
+   display.print((int)inj_duty_cycle);
    display.print("%"); 
   
    drawGraph(); 
