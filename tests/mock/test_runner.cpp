@@ -13,7 +13,7 @@ extern void loop();
 uint32_t _millis = 0;
 uint32_t _micros = 0;
 std::map<int, int> _pin_states;
-std::map<int, voidFuncPtr> _interrupts;
+std::map<int, InterruptInfo> _interrupts;
 voidFuncPtr _timer1_callback = nullptr;
 SerialMock Serial;
 SPI_Mock SPI;
@@ -21,14 +21,10 @@ TwoWire Wire;
 
 // Function to simulate a pulse on the injector pin
 void simulatePulse(int pin, uint32_t duration_us) {
-    _pin_states[pin] = HIGH;
-    if (_interrupts.count(pin)) _interrupts[pin]();
-
+    digitalWrite(pin, HIGH);
     _micros += duration_us;
     _millis = _micros / 1000;
-
-    _pin_states[pin] = LOW;
-    if (_interrupts.count(pin)) _interrupts[pin]();
+    digitalWrite(pin, LOW);
 }
 
 struct SimulationProfile {
@@ -46,35 +42,52 @@ Adafruit_GFX* _active_display = nullptr;
 void runProfile(const SimulationProfile& profile) {
     std::cout << "--- Starting Profile: " << profile.name << " ---" << std::endl;
     uint32_t profile_start_ms = _millis;
+    uint32_t last_loop_micros = _micros;
+
+    // Static state to carry over between profiles
+    static uint32_t last_inj_us = 0;
+    static uint32_t last_cam_us = 0;
 
     while (_millis - profile_start_ms < profile.duration_ms) {
         float progress = (float)(_millis - profile_start_ms) / profile.duration_ms;
         uint32_t current_rpm = profile.start_rpm + (uint32_t)(progress * (profile.end_rpm - profile.start_rpm));
         float current_pulse_ms = profile.start_pulse_ms + progress * (profile.end_pulse_ms - profile.start_pulse_ms);
 
-        // Simulating 4 cylinders (2 pulses per rev)
-        uint32_t revs_per_sec = current_rpm / 60;
-        if (revs_per_sec == 0) {
-            _micros += 100000;
+        if (current_rpm == 0) {
+            _micros += 10000;
             _millis = _micros / 1000;
         } else {
-            uint32_t micros_per_rev = 1000000 / revs_per_sec;
-            uint32_t micros_per_pulse = micros_per_rev / 2;
+            // High fidelity pulse train
+            uint32_t cam_interval_us = 1000000 / (current_rpm * 36 / 60);
+            uint32_t inj_interval_us = 1000000 / (current_rpm * 2 / 60);
 
-            uint32_t pulse_us = (uint32_t)(current_pulse_ms * 1000);
-            if (pulse_us > micros_per_pulse) pulse_us = micros_per_pulse;
+            // Advance time to the next event (cam, inj, or loop)
+            uint32_t next_cam = last_cam_us + cam_interval_us;
+            uint32_t next_inj = last_inj_us + inj_interval_us;
+            uint32_t next_loop = last_loop_micros + 10000; // 10ms loop
 
-            simulatePulse(2, 500); // Cam (approx)
-            simulatePulse(3, pulse_us); // Inj
-            simulatePulse(4, pulse_us);
-            simulatePulse(5, pulse_us);
+            uint32_t next_event = std::min({next_cam, next_inj, next_loop});
 
-            _micros += (micros_per_pulse - pulse_us);
-            _millis = _micros / 1000;
+            if (next_event > _micros) {
+                _micros = next_event;
+                _millis = _micros / 1000;
+            }
+
+            if (_micros >= next_cam) {
+                simulatePulse(2, 100);
+                last_cam_us = _micros;
+            }
+            if (_micros >= next_inj) {
+                simulatePulse(3, (uint32_t)(current_pulse_ms * 1000));
+                last_inj_us = _micros;
+            }
         }
 
-        if (_timer1_callback) _timer1_callback();
-        loop();
+        if (_micros - last_loop_micros >= 10000) {
+            if (_timer1_callback) _timer1_callback();
+            loop();
+            last_loop_micros = _micros;
+        }
     }
 
     // Capture frame at end of profile
@@ -96,12 +109,13 @@ int main() {
 
     setup();
 
+    // Long simulations to fill 128-pixel and 320-pixel graphs
     std::vector<SimulationProfile> profiles = {
-        {"Idling", 2000, 800, 800, 1.0, 1.0},
-        {"Accelerating", 5000, 800, 5000, 1.0, 5.0},
-        {"Cruising", 3000, 5000, 5000, 2.5, 2.5},
-        {"Decelerating", 3000, 5000, 800, 0.5, 0.5},
-        {"Engine Stop", 2000, 0, 0, 0, 0}
+        {"Idling", 20000, 800, 800, 1.0, 1.0},
+        {"Accelerating", 40000, 800, 5000, 1.0, 5.0},
+        {"Cruising", 40000, 5000, 5000, 2.5, 2.5},
+        {"Decelerating", 30000, 5000, 800, 0.5, 0.5},
+        {"Engine Stop", 10000, 0, 0, 0, 0}
     };
 
     for (const auto& p : profiles) {

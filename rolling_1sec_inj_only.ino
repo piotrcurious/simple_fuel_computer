@@ -20,9 +20,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 int graph_x = 0; // The x position of the graph
 int graph_y = 0; // The y position of the graph
 int graph_width = SCREEN_WIDTH; // The width of the graph
-int graph_height = SCREEN_HEIGHT; // The height of the graph
+int graph_height = SCREEN_HEIGHT - 10; // Leave space for text
 int graph_max = 20; // The maximum value of the graph in g/s
-int graph_data[SCREEN_WIDTH]; // The array to store the graph data
+float graph_data[SCREEN_WIDTH]; // The array to store the graph data
 
 // Define some variables for the injector pulse measurement
 unsigned long pulse_start = 0; // The start time of the pulse in microseconds
@@ -75,11 +75,14 @@ void loop() {
     graph_data[graph_width - 1] = fuel_consumption;
 
     // Clear the previous graph area
-    display.fillRect(graph_x + 1, graph_y + 1, graph_width -2 , graph_height -2 , SSD1306_BLACK);
+    display.clearDisplay();
 
     // Draw the new graph data as vertical lines
+    float max_val = 0.1;
+    for (int i = 0; i < graph_width; i++) if (graph_data[i] > max_val) max_val = graph_data[i];
+
     for (int i = 0; i < graph_width; i++) {
-      int line_height = map(graph_data[i], 0, graph_max, 0, graph_height);
+      int line_height = (int)((graph_data[i] / max_val) * graph_height);
       display.drawFastVLine(graph_x + i, graph_y + graph_height - line_height, line_height, SSD1306_WHITE);
     }
 

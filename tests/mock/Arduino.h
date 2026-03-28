@@ -11,6 +11,7 @@
 #include <chrono>
 #include <stdint.h>
 #include <stdio.h>
+#include <cstring>
 
 #define HIGH 0x1
 #define LOW  0x0
@@ -43,16 +44,32 @@ inline void delayMicroseconds(uint32_t us) { _micros += us; _millis = _micros / 
 
 inline void pinMode(int pin, int mode) {}
 extern std::map<int, int> _pin_states;
-inline int digitalRead(int pin) { return _pin_states[pin]; }
-inline void digitalWrite(int pin, int val) { _pin_states[pin] = val; }
-inline int analogRead(int pin) { return 512; }
 
 typedef void (*voidFuncPtr)(void);
-extern std::map<int, voidFuncPtr> _interrupts;
+struct InterruptInfo {
+    voidFuncPtr callback;
+    int mode;
+};
+extern std::map<int, InterruptInfo> _interrupts;
+
 inline void attachInterrupt(int pin, voidFuncPtr callback, int mode) {
-    _interrupts[pin] = callback;
+    _interrupts[pin] = {callback, mode};
 }
 inline int digitalPinToInterrupt(int pin) { return pin; }
+
+inline int digitalRead(int pin) { return _pin_states[pin]; }
+inline void digitalWrite(int pin, int val) {
+    int old_val = _pin_states[pin];
+    _pin_states[pin] = val;
+    if (_interrupts.count(pin)) {
+        auto& info = _interrupts[pin];
+        if (info.mode == CHANGE && val != old_val) info.callback();
+        else if (info.mode == RISING && val == HIGH && old_val == LOW) info.callback();
+        else if (info.mode == FALLING && val == LOW && old_val == HIGH) info.callback();
+    }
+}
+
+inline int analogRead(int pin) { return 512; }
 
 #define ICACHE_RAM_ATTR
 
@@ -60,11 +77,11 @@ class SerialMock {
 public:
     void begin(int baud) {}
     void print(const char* s) { std::cout << s; }
-    void print(float f, int p = 2) { std::cout << f; }
+    void print(float f, int p = 2) { printf("%.*f", p, f); }
     void print(int i) { std::cout << i; }
     void print(uint32_t i) { std::cout << i; }
     void println(const char* s) { std::cout << s << std::endl; }
-    void println(float f, int p = 2) { std::cout << f << std::endl; }
+    void println(float f, int p = 2) { printf("%.*f\n", p, f); }
     void println(int i) { std::cout << i << std::endl; }
     void println(uint32_t i) { std::cout << i << std::endl; }
     void println() { std::cout << std::endl; }

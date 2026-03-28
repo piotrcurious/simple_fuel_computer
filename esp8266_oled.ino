@@ -6,7 +6,7 @@
 
 // Define the pins for the display and the injector signal
 #define OLED_RESET 0  // GPIO0
-#define INJECTOR_PIN 5 // GPIO5
+#define INJECTOR_PIN 3 // GPIO5
 
 // Create an object for the display
 Adafruit_SSD1306 display(OLED_RESET);

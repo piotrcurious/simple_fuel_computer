@@ -103,18 +103,17 @@ void updateGraphData() {
 
 // function to draw the graph on the display 
 void drawGraph() {
-  float max_value = graph_data[0]; // initialize max value with first value 
-  for (int i = 1; i < GRAPH_WIDTH; i++) { // for each pixel except the first one 
-    if (graph_data[i] > max_value) { // if value is greater than max value 
-      max_value = graph_data[i]; // update max value 
+  float max_value = 0.001;
+  for (int i = 0; i < GRAPH_WIDTH; i++) {
+    if (graph_data[i] > max_value) {
+      max_value = graph_data[i];
     }
   }
   
-  for (int i = GRAPH_WIDTH -1 ; i >=0 ; i--) { 
+  for (int i = 0 ; i < GRAPH_WIDTH ; i++) {
     int x = i;
-    int y = map(graph_data[i],0,max_value,SCREEN_HEIGHT-1,SCREEN_HEIGHT-GRAPH_HEIGHT); 
-    display.drawPixel(x,y,SSD1306_WHITE); 
-    display.drawLine(x,y,x,SCREEN_HEIGHT-1,SSD1306_WHITE); 
+    int bar_height = (int)((graph_data[i] / max_value) * GRAPH_HEIGHT);
+    display.drawFastVLine(x, SCREEN_HEIGHT - bar_height, bar_height, SSD1306_WHITE);
    }
 }
 
@@ -156,12 +155,12 @@ void loop() {
    display.clearDisplay(); 
   
    display.setCursor(0,0); 
-   display.print("RPM: "); 
+   display.print("RPM:");
    display.print((int)rpm_smoothed);
   
-   display.setCursor(64,0); 
-   display.print("INJ: "); 
-   display.print(inj_duty_cycle); 
+   display.setCursor(60,0);
+   display.print(" INJ:");
+   display.print((int)inj_duty_cycle);
    display.print("%"); 
   
    drawGraph(); 

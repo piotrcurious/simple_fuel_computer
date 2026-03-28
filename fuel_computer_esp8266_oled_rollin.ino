@@ -6,7 +6,7 @@
 
 // Define the pins for the display and the injector signal
 //#define OLED_RESET 0  // GPIO0
-#define INJECTOR_PIN D1 // GPIO5
+#define INJECTOR_PIN 3 // GPIO5
 
 // Create an object for the display
 //Adafruit_SSD1306 display(OLED_RESET);
@@ -133,11 +133,9 @@ void setup() {
   display.display();
   
    // Set up a pin interrupt to call injectorISR on every change of state of INJECTOR_PIN 
-//   pinMode(INJECTOR_PIN, INPUT_PULLUP);
-   pinMode(INJECTOR_PIN, INPUT);
+   pinMode(INJECTOR_PIN, INPUT_PULLUP);
 
-   //attachInterrupt(digitalPinToInterrupt(INJECTOR_PIN), injectorISR, CHANGE);
-   attachInterrupt(INJECTOR_PIN, injectorISR, CHANGE);
+   attachInterrupt(digitalPinToInterrupt(INJECTOR_PIN), injectorISR, CHANGE);
    
    // Display a message on the screen when done setting up
    display.setCursor(0,16);
@@ -222,68 +220,32 @@ display.fillRect(TEXT_TIMEBASE_X,TEXT_TIMEBASE_Y-1,40,9,BLACK); // Clear the are
 
 // Update rolling graph with new data
 void updateGraph() {
-#ifdef OPTIMIZED_MAX_SEARCH
-// Shift the graph data to the left by one pixel and find the maximum value
-  graphMin = graphMax; // set graphMin to last graphMax value
-  graphMax = 0;
-  for (int i = 0; i < graphW - 1; i++) {
-    graphData[i] = graphData[i + 1];
-    if (graphData[i] > graphMax) {
-      graphMax = graphData[i];
-      }
-    if (graphData[i] < graphMin) {
-      graphMin = graphData[i];
-    }
-    // graphMax = max(graphMax, graphData[i]); 
-    // or use that instead 
-  }
-#endif // OPTIMIZED_MAX_SEARCH
-
-#ifndef OPTIMIZED_MAX_SEARCH
   // Shift the graph data to the left by one pixel
   for (int i = 0; i < graphW - 1; i++) {
     graphData[i] = graphData[i + 1];
   }
-#endif // OPTIMIZED_MAX_SEARCH
   
   // Add the new data to the rightmost pixel
   graphData[graphW - 1] = fuel_avg1_MLmin;
 
-#ifndef OPTIMIZED_MAX_SEARCH
-  // Find the maximum value in the graph data
-  graphMax = 0;
-  graphMin = 0; 
+  // Find the min and max values for scaling
+  graphMax = 1; // Default min max
+  graphMin = graphData[0];
   for (int i = 0; i < graphW; i++) {
-    if (graphData[i] > graphMax) {
-      graphMax = graphData[i];
-    }
+    if (graphData[i] > graphMax) graphMax = graphData[i];
+    if (graphData[i] < graphMin) graphMin = graphData[i];
   }
-#endif // OPTIMIZED_MAX_SEARCH
-
+  // Ensure we don't have a zero range
+  if (graphMax == graphMin) graphMax = graphMin + 1;
 }
 
 // Draw rolling graph on OLED display
 void drawGraph() {
-  // Draw a horizontal line at the bottom of the graph
-  //display.drawLine(graphX, graphY + graphH, graphX + graphW , graphY + graphH , SSD1306_WHITE);
-  
-  // Draw a vertical line at the left of the graph
-  //display.drawLine(graphX, graphY, graphX, graphY + graphH - 1, SSD1306_WHITE);
-  
   // Draw the graph data as vertical bars
   for (uint8_t i = 0; i < graphW; i++) {
-    // Map the data value to the graph height
-//       uint8_t barHeight = map(graphData[i], graphMin, graphMax, 0, graphH );
-       uint16_t barHeight = map(graphData[i], graphMin, graphMax+1, 0, graphH );
-
-//      uint8_t barHeight = graphH*graphMax graphData[i];
-
-//    uint8_t barHeight= 10;
-    // Draw a vertical bar from the bottom to the data value
-//    display.drawLine(graphX + i, graphY + graphH , graphX + i, graphY + graphH - barHeight, SSD1306_WHITE);
-    //display.drawFastVLine(graphX + i, graphY + graphH , barHeight, SSD1306_WHITE);
-    display.drawFastVLine(graphX + i, graphY+(graphH-barHeight) , barHeight, SSD1306_WHITE);
-    
+       uint16_t barHeight = (uint16_t)(((float)(graphData[i] - graphMin) / (graphMax - graphMin)) * graphH);
+       if (barHeight > graphH) barHeight = graphH;
+       display.drawFastVLine(graphX + i, graphY+(graphH-barHeight) , barHeight, SSD1306_WHITE);
   }
 }
 
