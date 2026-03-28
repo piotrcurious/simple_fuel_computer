@@ -176,6 +176,8 @@ void setup() {
 #ifdef DRAW_TEXT
 // Update OLED display with new data
 void updateDisplay() {
+char buffer[40];
+  sprintf(buffer, "%d.%02d",(uint16_t)fuel_avg1, (uint16_t)(fuel_avg1*100)%100);
 
 #ifdef DRAW_TEXT_SHADOW
 //cast +1 -1 shadow first
@@ -221,8 +223,6 @@ void updateDisplay() {
 int16_t  x1, y1;
 uint16_t w, h;
 
-char buffer[40];
-  sprintf(buffer, "%d.%02d",(uint16_t)fuel_avg1, (uint16_t)(fuel_avg1*100)%100);
 display.getTextBounds(buffer, TEXT_LPKM_X, TEXT_LPKM_Y, &x1, &y1, &w, &h);
 display.fillRect(x1,y1-1,w,h+1,BLACK); // Clear the area below CPM value
 #endif // DRAW_TEXT_RECTANGLE
@@ -246,7 +246,7 @@ display.fillRect(TEXT_TIMEBASE_X,TEXT_TIMEBASE_Y-1,40,9,BLACK); // Clear the are
   display.print("ms");
 #endif //DRAW_TEXT_TIMEBASE
 }
-#endif DRAW_TEXT
+#endif // DRAW_TEXT
 
 // Update rolling graph with new data
 void updateGraph() {
@@ -265,14 +265,14 @@ void updateGraph() {
     // graphMax = max(graphMax, graphData[i]); 
     // or use that instead 
   }
-#endif OPTIMIZED_MAX_SEARCH
+#endif // OPTIMIZED_MAX_SEARCH
 
 #ifndef OPTIMIZED_MAX_SEARCH
   // Shift the graph data to the left by one pixel
   for (int i = 0; i < graphW - 1; i++) {
     graphData[i] = graphData[i + 1];
   }
-#endif OPTIMIZED_MAX_SEARCH
+#endif // OPTIMIZED_MAX_SEARCH
   
   // Add the new data to the rightmost pixel
 //  graphData[graphW - 1] = counts_copy;
@@ -287,7 +287,7 @@ void updateGraph() {
       graphMax = graphData[i];
     }
   }
-#endif OPTIMIZED_MAX_SEARCH
+#endif // OPTIMIZED_MAX_SEARCH
 
 }
 

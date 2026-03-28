@@ -1,8 +1,11 @@
+#include "Arduino.h"
+#include "Adafruit_SSD1306.h"
+#include <Wire.h>
+void  injectorISR();
+void  timerISR();
+void drawGraph();
 
 // Include the libraries for the display and the ESP8266
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <ESP8266WiFi.h>
 
 // Define the pins for the display and the injector signal
 //#define OLED_RESET 0  // GPIO0
@@ -54,7 +57,7 @@ volatile unsigned long pulseStart = 0; // The start time of the current pulse in
 volatile unsigned long pulseWidth = 0; // The width of the current pulse in microseconds
 volatile uint32_t totalPulseWidth = 0; // The total width of all pulses in one second in microseconds
 float fuelConsumption = 0; // The fuel consumption in milliliters per second
-float injectorFlowRate = 1; // The injector flow rate fudge factor
+float injectorFlowRate = 10; // The injector flow rate fudge factor
 
 volatile uint32_t counts = 0; // accumulated pulses
 volatile uint32_t counts_copy = 0; // accumulated pulses, outside ISR copy
@@ -85,7 +88,7 @@ uint32_t graphMax = 100;         // Maximum value of the graph
 // Create an array to store the graph data
 uint32_t graphData[SCREEN_WIDTH] ;
 
-uint32_t interval = 200;     // Interval to update fuel consumption 
+uint32_t interval = 100;     // Interval to update fuel consumption
 uint32_t graph_interval = 1000 ; // Interval to update graph , adjustable by a knob 
 uint8_t  display_brightness ; // global variable to adjust display brightness
 
@@ -97,7 +100,7 @@ uint8_t timeBase = 1; // Time base for the rolling graph in seconds
 volatile bool updateDisplay_flag = false;
 
 // This function is called when the injector signal changes state
-void ICACHE_RAM_ATTR injectorISR() {
+void  injectorISR() {
   // Check if the signal is high or low
   if (digitalRead(INJECTOR_PIN) == HIGH) {
     // If high, record the start time of the pulse
@@ -111,7 +114,7 @@ void ICACHE_RAM_ATTR injectorISR() {
 }
 
 // This function is called every second by a timer interrupt
-void ICACHE_RAM_ATTR timerISR() {
+void  timerISR() {
   // Calculate the fuel consumption based on the total pulse width and the injector flow rate
 //  fuelConsumption = (totalPulseWidth / 1000000.0) * (injectorFlowRate / 60.0);
   fuelConsumption = totalPulseWidth  * injectorFlowRate ;
@@ -176,6 +179,8 @@ void setup() {
 #ifdef DRAW_TEXT
 // Update OLED display with new data
 void updateDisplay() {
+char buffer[40];
+  sprintf(buffer, "%d.%02d",(uint16_t)fuel_avg1, (uint16_t)(fuel_avg1*100)%100);
 
 #ifdef DRAW_TEXT_SHADOW
 //cast +1 -1 shadow first
@@ -221,8 +226,6 @@ void updateDisplay() {
 int16_t  x1, y1;
 uint16_t w, h;
 
-char buffer[40];
-  sprintf(buffer, "%d.%02d",(uint16_t)fuel_avg1, (uint16_t)(fuel_avg1*100)%100);
 display.getTextBounds(buffer, TEXT_LPKM_X, TEXT_LPKM_Y, &x1, &y1, &w, &h);
 display.fillRect(x1,y1-1,w,h+1,BLACK); // Clear the area below CPM value
 #endif // DRAW_TEXT_RECTANGLE
@@ -246,7 +249,7 @@ display.fillRect(TEXT_TIMEBASE_X,TEXT_TIMEBASE_Y-1,40,9,BLACK); // Clear the are
   display.print("ms");
 #endif //DRAW_TEXT_TIMEBASE
 }
-#endif DRAW_TEXT
+#endif // DRAW_TEXT
 
 // Update rolling graph with new data
 void updateGraph() {
@@ -265,14 +268,14 @@ void updateGraph() {
     // graphMax = max(graphMax, graphData[i]); 
     // or use that instead 
   }
-#endif OPTIMIZED_MAX_SEARCH
+#endif // OPTIMIZED_MAX_SEARCH
 
 #ifndef OPTIMIZED_MAX_SEARCH
   // Shift the graph data to the left by one pixel
   for (int i = 0; i < graphW - 1; i++) {
     graphData[i] = graphData[i + 1];
   }
-#endif OPTIMIZED_MAX_SEARCH
+#endif // OPTIMIZED_MAX_SEARCH
   
   // Add the new data to the rightmost pixel
 //  graphData[graphW - 1] = counts_copy;
@@ -287,7 +290,7 @@ void updateGraph() {
       graphMax = graphData[i];
     }
   }
-#endif OPTIMIZED_MAX_SEARCH
+#endif // OPTIMIZED_MAX_SEARCH
 
 }
 
@@ -331,7 +334,7 @@ void loop() {
     interrupts();     // Enable interrupts again
     
 //    fuel_avg1 = (fuel_avg1 * 59.0 + counts_copy * 60.0) / 60.0;  // Calculate fuel consumption per minute using exponential moving average    
-    fuel_avg1 = (fuel_avg1 * 3.0 + counts_copy*4.0) / 4.0;  // Calculate fuel consumption per minute using exponential moving average    
+    fuel_avg1 = (fuel_avg1 * 5.0 + counts_copy * 6.0) / 6.0;  // Calculate fuel consumption per minute using exponential moving average
     
 //    Serial.print("CPM: "); // Print counts per minute to serial monitor
 //    Serial.println(cpm);
@@ -344,10 +347,9 @@ void loop() {
 //      Serial.println(cpm_avg2,3); // Print long term average
 //      }
 
-  }
     knobValue = analogRead(KNOB_PIN); // Read value from knob
-    knobValue = 1; // hard code for tests
-    timeBase = map(knobValue, 0, 920, interval, interval*10); // Map knob value to time base in miliseconds
+    knobValue = 300; // hard code for tests
+    timeBase = map(knobValue, 0, 920, 1, 200); // Map knob value to time base in miliseconds
     graph_interval = (uint32_t)timeBase  ; // Calculate graph interval based on time base 
     
   if (currentMillis - previousMillis_graph >= graph_interval) {
@@ -366,7 +368,7 @@ void loop() {
 
 
  
-//  } //if 1 second interval
+  } //if 1 second interval
   
 /*
     if (pulse_beep){
@@ -390,3 +392,58 @@ void loop() {
 */
     
 } // loop()
+
+
+#include "Arduino.h"
+#include <map>
+
+// External declarations for setup and loop
+extern void setup();
+extern void loop();
+
+// Global mocks
+uint32_t _millis = 0;
+uint32_t _micros = 0;
+std::map<int, int> _pin_states;
+std::map<int, voidFuncPtr> _interrupts;
+voidFuncPtr _timer1_callback = nullptr;
+SerialMock Serial;
+SPI_Mock SPI;
+TwoWire Wire;
+
+// Function to simulate a pulse on the injector pin
+void simulatePulse(int pin, uint32_t duration_us) {
+    _pin_states[pin] = HIGH;
+    if (_interrupts.count(pin)) _interrupts[pin]();
+
+    _micros += duration_us;
+    _millis = _micros / 1000;
+
+    _pin_states[pin] = LOW;
+    if (_interrupts.count(pin)) _interrupts[pin]();
+}
+
+int main() {
+    setup();
+
+    for (int i = 0; i < 100; i++) {
+        // Simulate some pulses (e.g., at 3000 RPM)
+        for (int p = 0; p < 10; p++) {
+            simulatePulse(2, 1000); // Pulse on pin 2
+            simulatePulse(3, 1000); // Pulse on pin 3
+            simulatePulse(4, 1000); // Pulse on pin 4
+            simulatePulse(5, 1000); // Pulse on pin 5
+            _micros += 19000;
+            _millis = _micros / 1000;
+        }
+
+        if (_timer1_callback) _timer1_callback();
+
+        loop();
+
+        _millis += 100;
+        _micros += 100000;
+    }
+
+    return 0;
+}
