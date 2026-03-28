@@ -76,20 +76,12 @@ void loop() {
     Serial.print(fuelConsumption);
     Serial.println(" ml/s");
 
-    // Update the graph data with the new value
-    graphData[graphIndex] = fuelConsumption;
-
-    // Increment the graph index and wrap around if necessary
-    graphIndex++;
-    if (graphIndex > GRAPH_WIDTH-1) {
-     graphIndex = GRAPH_WIDTH-1;
-
-
     // Shift the graph data array to the left by one position
-     for (int i = 0; i < GRAPH_WIDTH - 1; i++) {
+    for (int i = 0; i < GRAPH_WIDTH - 1; i++) {
       graphData[i] = graphData[i + 1];
-      }
     }
+    // Update the graph data with the new value at the end
+    graphData[GRAPH_WIDTH - 1] = fuelConsumption;
 
     // Draw the graph on the display
     drawGraph();
@@ -127,13 +119,19 @@ void drawGraph() {
   // Clear the graph area with black color
   myDisplay.fillRect(GRAPH_X, GRAPH_Y, GRAPH_X + GRAPH_WIDTH, GRAPH_Y + GRAPH_HEIGHT, BLACK);
 
+  // Find max value for scaling
+  float maxVal = 0.1; // Minimum scale
+  for (int i = 0; i < GRAPH_WIDTH; i++) {
+    if (graphData[i] > maxVal) maxVal = graphData[i];
+  }
+
   // Loop through the graph data array
   for (int i = 0; i < GRAPH_WIDTH; i++) {
     // Calculate the x coordinate of the current point
     int x = GRAPH_X + i;
 
-    // Calculate the y coordinate of the current point using a scaling factor of 10 (this may vary depending on your fuel consumption range)
-    int y = GRAPH_Y + GRAPH_HEIGHT - (graphData[i] * 10);
+    // Calculate the y coordinate of the current point
+    int y = GRAPH_Y + GRAPH_HEIGHT - (int)((graphData[i] / maxVal) * GRAPH_HEIGHT);
 
     // Draw a vertical line from the bottom to the current point with green color
     myDisplay.drawLine(x, GRAPH_Y + GRAPH_HEIGHT, x, y, GRAPH_COLOR);

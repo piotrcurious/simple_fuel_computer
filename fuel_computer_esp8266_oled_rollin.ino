@@ -110,13 +110,14 @@ void ICACHE_RAM_ATTR injectorISR() {
   }
 }
 
-// This function is called every second by a timer interrupt
+// This function is called periodically by a timer interrupt
 void ICACHE_RAM_ATTR timerISR() {
-  // Calculate the fuel consumption based on the total pulse width and the injector flow rate
-//  fuelConsumption = (totalPulseWidth / 1000000.0) * (injectorFlowRate / 60.0);
-  fuelConsumption = totalPulseWidth  * injectorFlowRate ;
+  // totalPulseWidth is in microseconds. fraction of second = totalPulseWidth / 1,000,000
+  // injectorFlowRate is typically in ml/min. ml/sec = injectorFlowRate / 60.
+  // fuelConsumption in ml/sec = (totalPulseWidth / 1,000,000) * (injectorFlowRate / 60)
+  fuelConsumption = (totalPulseWidth / 1000000.0) * (injectorFlowRate / 60.0);
   
-  // Reset the total pulse width for the next second
+  // Reset the total pulse width for the next interval
   totalPulseWidth = 0;
   
   // Display the fuel consumption on the serial monitor for debugging
@@ -326,12 +327,17 @@ void loop() {
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis; // Save current time
     noInterrupts();  //disable interrupts while reading and updating counts
-    counts_copy = counts; // take snapshot of counts
+    counts_copy = counts; // take snapshot of counts (total pulse width in microseconds over 'interval' ms)
     counts = 0;       // Reset counts to zero
     interrupts();     // Enable interrupts again
     
-//    fuel_avg1 = (fuel_avg1 * 59.0 + counts_copy * 60.0) / 60.0;  // Calculate fuel consumption per minute using exponential moving average    
-    fuel_avg1 = (fuel_avg1 * 5.0 + counts_copy * 6.0) / 6.0;  // Calculate fuel consumption per minute using exponential moving average    
+    // Convert counts_copy to ml/min
+    // fraction_of_time = counts_copy / (interval * 1000)
+    // ml_min = fraction_of_time * injectorFlowRate
+    float current_ml_min = (counts_copy / (float)(interval * 1000.0)) * injectorFlowRate;
+
+    // fuel_avg1 is an exponential moving average of ml/min
+    fuel_avg1 = (fuel_avg1 * 9.0 + current_ml_min) / 10.0;
     
 //    Serial.print("CPM: "); // Print counts per minute to serial monitor
 //    Serial.println(cpm);
@@ -345,8 +351,7 @@ void loop() {
 //      }
     
     knobValue = analogRead(KNOB_PIN); // Read value from knob
-    knobValue = 300; // hard code for tests
-    timeBase = map(knobValue, 0, 920, 1, 200); // Map knob value to time base in miliseconds
+    timeBase = map(knobValue, 0, 1023, 10, 1000); // Map knob value to time base in miliseconds
     graph_interval = (uint32_t)timeBase  ; // Calculate graph interval based on time base 
     
   if (currentMillis - previousMillis_graph >= graph_interval) {

@@ -10,10 +10,10 @@ This directory contains a mock Arduino environment to test the `.ino` fuel compu
 
 ## Running Tests
 
-You can use the provided `test_ino.py` script to test any `.ino` file. It will create a temporary C++ file that includes the mock environment and the `.ino` file content, compiles it, and runs it.
+You can use the provided `scripts/test_ino.py` script to test any `.ino` file. It will create a temporary C++ file in the `tests/` directory that includes the mock environment and the `.ino` file content, compiles it, and runs it.
 
 ```bash
-python3 /home/jules/self_created_tools/test_ino.py your_file.ino
+python3 scripts/test_ino.py your_file.ino
 ```
 
-(Note: The `test_ino.py` is currently in the agent's home directory for convenience during development, but its logic can be replicated or moved to a permanent location in the repository.)
+The script automatically handles forward declarations and mocking of specific Arduino-isms to allow the `.ino` files to compile as standard C++.

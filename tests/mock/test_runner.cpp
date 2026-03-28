@@ -1,6 +1,7 @@
 
 #include "Arduino.h"
 #include <map>
+#include "Adafruit_SSD1306.h"
 
 // External declarations for setup and loop
 extern void setup();

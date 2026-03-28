@@ -41,12 +41,14 @@ void injectorISR() {
   }
 }
 
-// This function is called every second by a timer interrupt
+// This function is called periodically by a timer interrupt
 void timerISR() {
-  // Calculate the fuel consumption based on the total pulse width and the injector flow rate
+  // totalPulseWidth is in microseconds. fraction of second = totalPulseWidth / 1,000,000
+  // injectorFlowRate is typically in ml/min. ml/sec = injectorFlowRate / 60.
+  // fuelConsumption in ml/sec = (totalPulseWidth / 1,000,000) * (injectorFlowRate / 60)
   fuelConsumption = (totalPulseWidth / 1000000.0) * (injectorFlowRate / 60.0);
   
-  // Reset the total pulse width for the next second
+  // Reset the total pulse width for the next interval
   totalPulseWidth = 0;
   
   // Display the fuel consumption on the serial monitor for debugging
