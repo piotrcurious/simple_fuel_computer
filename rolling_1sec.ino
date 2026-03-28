@@ -27,8 +27,10 @@ volatile unsigned long inj_pulse_width = 0; // width of injector pulse in micros
 volatile unsigned long last_cam_time = 0; // last time a cam pulse was detected in microseconds
 volatile unsigned long last_inj_time = 0; // last time an injector pulse was detected in microseconds
 float rpm = 0; // engine speed in revolutions per minute
+float rpm_smoothed = 0; // smoothed engine speed
 float inj_duty_cycle = 0; // injector duty cycle in percentage
 float fuel_consumption = 0; // fuel consumption in g/s
+float fuel_smoothed = 0; // smoothed fuel consumption in g/s
 float graph_data[GRAPH_WIDTH]; // array to store the graph data
 
 unsigned long last_rev_time = 0;
@@ -39,7 +41,10 @@ void camISR() {
   if (cam_pulse_count == PULSE_PER_REV) { // if one revolution is completed
     unsigned long rev_duration = current_time - last_rev_time;
     if (rev_duration > 0) {
-      rpm = 60000000.0 / rev_duration; // calculate the rpm
+      float instant_rpm = 60000000.0 / rev_duration; // calculate the rpm
+      rpm = instant_rpm; // raw RPM for quick calculations
+      // Exponential moving average for smoothing
+      rpm_smoothed = (rpm_smoothed * 0.7) + (instant_rpm * 0.3);
     }
     cam_pulse_count = 0; // reset the cam pulse count
     last_rev_time = current_time;
@@ -74,9 +79,12 @@ void calculateFuelConsumption() {
     // ml/sec = (inj_pulse_width / duration) * (INJ_FLOW_RATE / 60.0)
     // g/sec = ml/sec * FUEL_DENSITY
     fuel_consumption = (inj_pulse_width / (float)duration) * (INJ_FLOW_RATE / 60.0) * FUEL_DENSITY;
+    fuel_smoothed = (fuel_smoothed * 0.8) + (fuel_consumption * 0.2);
   } else { // if engine is not running
     inj_duty_cycle = 0; // set inj duty cycle to zero
     fuel_consumption = 0; // set fuel consumption to zero
+    fuel_smoothed = 0;
+    rpm_smoothed = 0;
   }
   inj_pulse_width = 0;
   last_calc_time = current_time;
@@ -87,7 +95,7 @@ void updateGraphData() {
   for (int i = 0; i < GRAPH_WIDTH - 1; i++) { // for each pixel except the last one 
     graph_data[i] = graph_data[i + 1]; // shift the value left by one pixel 
   }
-  graph_data[GRAPH_WIDTH - 1] = fuel_consumption; // set the last pixel value to the latest fuel consumption value 
+  graph_data[GRAPH_WIDTH - 1] = fuel_smoothed; // use smoothed value for graph
 }
 
 // function to draw the graph on the display 
@@ -138,15 +146,15 @@ void loop() {
    updateGraphData(); 
    interrupts(); 
   
-   Serial.print("RPM: "); Serial.print(rpm);
+   Serial.print("RPM: "); Serial.print(rpm_smoothed);
    Serial.print(" INJ: "); Serial.print(inj_duty_cycle);
-   Serial.print("% Fuel: "); Serial.println(fuel_consumption);
+   Serial.print("% Fuel: "); Serial.println(fuel_smoothed);
 
    display.clearDisplay(); 
   
    display.setCursor(0,0); 
    display.print("RPM: "); 
-   display.print(rpm); 
+   display.print((int)rpm_smoothed);
   
    display.setCursor(64,0); 
    display.print("INJ: "); 

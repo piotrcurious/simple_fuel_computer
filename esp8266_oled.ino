@@ -13,10 +13,9 @@ Adafruit_SSD1306 display(OLED_RESET);
 
 // Declare some variables for the fuel consumption calculation
 volatile unsigned long pulseStart = 0; // The start time of the current pulse in microseconds
-volatile unsigned long pulseWidth = 0; // The width of the current pulse in microseconds
-volatile unsigned long totalPulseWidth = 0; // The total width of all pulses in one second in microseconds
-float fuelConsumption = 0; // The fuel consumption in milliliters per second
-float injectorFlowRate = 10; // The injector flow rate in milliliters per minute
+volatile unsigned long totalPulseWidth = 0; // The total width of all pulses in the accumulation interval
+float fuelConsumptionMLsec = 0; // The fuel consumption in milliliters per second
+float injectorFlowRateMLmin = 200.0; // The injector flow rate in milliliters per minute
 
 // Declare some variables for the rolling graph display
 int graphX = 0; // The x coordinate of the graph
@@ -36,25 +35,25 @@ void injectorISR() {
     pulseStart = micros();
   } else {
     // If low, calculate the pulse width and add it to the total
-    pulseWidth = micros() - pulseStart;
-    totalPulseWidth += pulseWidth;
+    totalPulseWidth += (micros() - pulseStart);
   }
 }
 
 // This function is called periodically by a timer interrupt
 void timerISR() {
-  // totalPulseWidth is in microseconds. fraction of second = totalPulseWidth / 1,000,000
-  // injectorFlowRate is typically in ml/min. ml/sec = injectorFlowRate / 60.
-  // fuelConsumption in ml/sec = (totalPulseWidth / 1,000,000) * (injectorFlowRate / 60)
-  fuelConsumption = (totalPulseWidth / 1000000.0) * (injectorFlowRate / 60.0);
+  static uint32_t last_micros = 0;
+  uint32_t current_micros = micros();
+  uint32_t duration = current_micros - last_micros;
+  if (duration == 0) return;
+  last_micros = current_micros;
+
+  // totalPulseWidth is in microseconds.
+  // injectorFlowRateMLmin is in ml/min. ml/sec = injectorFlowRateMLmin / 60.
+  // fuelConsumptionMLsec in ml/sec = (totalPulseWidth / (float)duration) * (injectorFlowRateMLmin / 60.0);
+  fuelConsumptionMLsec = (totalPulseWidth / (float)duration) * (injectorFlowRateMLmin / 60.0);
   
   // Reset the total pulse width for the next interval
   totalPulseWidth = 0;
-  
-  // Display the fuel consumption on the serial monitor for debugging
-  Serial.print("Fuel consumption: ");
-  Serial.print(fuelConsumption);
-  Serial.println(" ml/s");
   
   // Set the flag variable to true to indicate that the display needs to be updated
   updateDisplay = true;
@@ -78,10 +77,10 @@ void setup() {
   display.setCursor(0,0);
   display.println("Setting up...");
   
-   // Set up a timer interrupt to call timerISR every second
+   // Set up a timer interrupt to call timerISR every 0.1 second (80MHz/16/500000)
    timer1_attachInterrupt(timerISR);
    timer1_enable(TIM_DIV16, TIM_EDGE, TIM_LOOP);
-   timer1_write(500000); // Set timer interval to one second (80MHz/16/500000)
+   timer1_write(500000);
    
    // Set up a pin interrupt to call injectorISR on every change of state of INJECTOR_PIN 
    pinMode(INJECTOR_PIN, INPUT_PULLUP);
@@ -95,12 +94,19 @@ void setup() {
 
 // This function updates the display with the rolling graph of fuel consumption
 void loop() {
+  float fuel_copy;
   
   // Check if the flag variable is true
   if (updateDisplay) {
+    noInterrupts();
+    fuel_copy = fuelConsumptionMLsec;
+    updateDisplay = false;
+    interrupts();
+
+    Serial.print("Fuel: "); Serial.print(fuel_copy); Serial.println(" ml/sec");
     
     // Draw a line on the graph representing the fuel consumption
-    display.drawLine(graphX, graphY + graphHeight - 1, graphX, graphY + graphHeight - (fuelConsumption * graphScale), WHITE);
+    display.drawLine(graphX, graphY + graphHeight - 1, graphX, graphY + graphHeight - (fuel_copy * graphScale), WHITE);
     
     // Increment the x coordinate of the graph and wrap around if necessary
     graphX++;
@@ -113,9 +119,6 @@ void loop() {
     
     // Update the display with the new line
     display.display();
-    
-    // Reset the flag variable to false
-    updateDisplay = false;
     
     }
 }

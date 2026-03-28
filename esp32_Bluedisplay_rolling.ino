@@ -17,9 +17,9 @@
 
 // Define the variables for the fuel consumption calculation
 volatile unsigned long pulseStart = 0; // The start time of the current pulse in microseconds
-volatile unsigned long totalPulseWidth = 0; // The total width of all pulses in one second in microseconds
-float fuelConsumption = 0; // The fuel consumption in milliliters per second
-float injectorFlowRate = 10; // The injector flow rate in milliliters per minute
+volatile unsigned long totalPulseWidth = 0; // The total width of all pulses in the accumulation interval
+float fuelConsumptionMLsec = 0; // The fuel consumption in milliliters per second
+float injectorFlowRateMLmin = 200.0; // The injector flow rate in milliliters per minute
 unsigned long lastSecondTime; // time of the last second in milliseconds
 
 // Define the array for storing the graph data
@@ -55,7 +55,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(INJECTOR_PIN), injectorInterrupt, CHANGE);
 
   // Initialize the variables
-  fuelConsumption = 0;
+  fuelConsumptionMLsec = 0;
   totalPulseWidth = 0;
   lastSecondTime = millis();
 }
@@ -71,12 +71,12 @@ void loop() {
 
     // Calculate the average fuel consumption in the last second
     // totalPulseWidth is in microseconds.
-    // injectorFlowRate is in ml/min. ml/sec = injectorFlowRate / 60.
-    fuelConsumption = (pulseWidthSnapshot / 1000000.0) * (injectorFlowRate / 60.0);
+    // injectorFlowRateMLmin is in ml/min. ml/sec = injectorFlowRateMLmin / 60.
+    fuelConsumptionMLsec = (pulseWidthSnapshot / 1000000.0) * (injectorFlowRateMLmin / 60.0);
 
     // Print the fuel consumption to serial monitor for debugging
     Serial.print("Fuel consumption: ");
-    Serial.print(fuelConsumption);
+    Serial.print(fuelConsumptionMLsec);
     Serial.println(" ml/s");
 
     // Shift the graph data array to the left by one position
@@ -84,7 +84,7 @@ void loop() {
       graphData[i] = graphData[i + 1];
     }
     // Update the graph data with the new value at the end
-    graphData[GRAPH_WIDTH - 1] = fuelConsumption;
+    graphData[GRAPH_WIDTH - 1] = fuelConsumptionMLsec;
 
     // Draw the graph on the display
     drawGraph();

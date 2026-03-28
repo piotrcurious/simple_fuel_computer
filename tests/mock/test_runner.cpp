@@ -2,6 +2,7 @@
 #include "Arduino.h"
 #include <map>
 #include "Adafruit_SSD1306.h"
+#include <vector>
 
 // External declarations for setup and loop
 extern void setup();
@@ -29,43 +30,63 @@ void simulatePulse(int pin, uint32_t duration_us) {
     if (_interrupts.count(pin)) _interrupts[pin]();
 }
 
-int main() {
-    setup();
+struct SimulationProfile {
+    std::string name;
+    uint32_t duration_ms;
+    uint32_t start_rpm;
+    uint32_t end_rpm;
+    float start_pulse_ms;
+    float end_pulse_ms;
+};
 
-    // Simulate 10 seconds of varying RPM/Fuel
-    for (int i = 0; i < 100; i++) {
-        // Vary pulse duration and frequency based on i
-        uint32_t pulse_len = 500 + i * 10; // 0.5ms to 1.5ms
-        uint32_t gap_len = 20000 - i * 100; // 20ms to 10ms (3000 to 6000 RPM)
+void runProfile(const SimulationProfile& profile) {
+    std::cout << "--- Starting Profile: " << profile.name << " ---" << std::endl;
+    uint32_t profile_start_ms = _millis;
 
-        // Simulate pulses for this 100ms slice
-        uint32_t slice_micros = 0;
-        while (slice_micros < 100000) {
-            simulatePulse(2, 500); // Cam pulse (simplified)
-            simulatePulse(3, pulse_len); // Injector
-            simulatePulse(4, pulse_len);
-            simulatePulse(5, pulse_len);
+    while (_millis - profile_start_ms < profile.duration_ms) {
+        float progress = (float)(_millis - profile_start_ms) / profile.duration_ms;
+        uint32_t current_rpm = profile.start_rpm + (uint32_t)(progress * (profile.end_rpm - profile.start_rpm));
+        float current_pulse_ms = profile.start_pulse_ms + progress * (profile.end_pulse_ms - profile.start_pulse_ms);
 
-            _micros += gap_len;
+        // Simulating 4 cylinders (2 pulses per rev)
+        uint32_t revs_per_sec = current_rpm / 60;
+        if (revs_per_sec == 0) {
+            _micros += 100000;
             _millis = _micros / 1000;
-            slice_micros += (pulse_len + gap_len);
+        } else {
+            uint32_t micros_per_rev = 1000000 / revs_per_sec;
+            uint32_t micros_per_pulse = micros_per_rev / 2;
+
+            uint32_t pulse_us = (uint32_t)(current_pulse_ms * 1000);
+            if (pulse_us > micros_per_pulse) pulse_us = micros_per_pulse;
+
+            simulatePulse(2, 500); // Cam (approx)
+            simulatePulse(3, pulse_us); // Inj
+            simulatePulse(4, pulse_us);
+            simulatePulse(5, pulse_us);
+
+            _micros += (micros_per_pulse - pulse_us);
+            _millis = _micros / 1000;
         }
 
         if (_timer1_callback) _timer1_callback();
-
         loop();
-
-        _millis += 10; // catch up
-        _micros += 10000;
     }
+}
 
-    // Simulate engine stop
-    std::cout << "--- Simulating engine stop ---" << std::endl;
-    for (int i = 0; i < 30; i++) {
-        _millis += 100;
-        _micros += 100000;
-        if (_timer1_callback) _timer1_callback();
-        loop();
+int main() {
+    setup();
+
+    std::vector<SimulationProfile> profiles = {
+        {"Idling", 2000, 800, 800, 1.0, 1.0},
+        {"Accelerating", 5000, 800, 5000, 1.0, 5.0},
+        {"Cruising", 3000, 5000, 5000, 2.5, 2.5},
+        {"Decelerating", 3000, 5000, 800, 0.5, 0.5},
+        {"Engine Stop", 2000, 0, 0, 0, 0}
+    };
+
+    for (const auto& p : profiles) {
+        runProfile(p);
     }
 
     return 0;

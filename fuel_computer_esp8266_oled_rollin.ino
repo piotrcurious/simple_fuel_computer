@@ -51,14 +51,12 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT,
 
 // Declare some variables for the fuel consumption calculation
 volatile unsigned long pulseStart = 0; // The start time of the current pulse in microseconds
-volatile unsigned long pulseWidth = 0; // The width of the current pulse in microseconds
-volatile uint32_t totalPulseWidth = 0; // The total width of all pulses in one second in microseconds
-float fuelConsumption = 0; // The fuel consumption in milliliters per second
-float injectorFlowRate = 10; // The injector flow rate fudge factor
+volatile uint32_t totalPulseWidth = 0; // The total width of all pulses in the accumulation interval
+float fuelConsumptionMLsec = 0; // The fuel consumption in milliliters per second
+float injectorFlowRateMLmin = 200.0; // The injector flow rate in milliliters per minute
 
-volatile uint32_t counts = 0; // accumulated pulses
-volatile uint32_t counts_copy = 0; // accumulated pulses, outside ISR copy
-volatile float fuel_avg1    = 0; // average fuel consumption
+uint32_t pulseWidthSnapshot = 0; // Snapshot of totalPulseWidth for processing
+float fuel_avg1_MLmin = 0; // average fuel consumption in ml/min
 
 
 uint32_t previousMillis = 0; // Previous time in milliseconds
@@ -104,29 +102,8 @@ void ICACHE_RAM_ATTR injectorISR() {
     pulseStart = micros();
   } else {
     // If low, calculate the pulse width and add it to the total
-    pulseWidth = micros() - pulseStart;
-    totalPulseWidth += pulseWidth;    // add up the pulses to calculate momentary consumption 
-    counts += pulseWidth;             // add up the pulses to calculate average   consumption
+    totalPulseWidth += (micros() - pulseStart);
   }
-}
-
-// This function is called periodically by a timer interrupt
-void ICACHE_RAM_ATTR timerISR() {
-  // totalPulseWidth is in microseconds. fraction of second = totalPulseWidth / 1,000,000
-  // injectorFlowRate is typically in ml/min. ml/sec = injectorFlowRate / 60.
-  // fuelConsumption in ml/sec = (totalPulseWidth / 1,000,000) * (injectorFlowRate / 60)
-  fuelConsumption = (totalPulseWidth / 1000000.0) * (injectorFlowRate / 60.0);
-  
-  // Reset the total pulse width for the next interval
-  totalPulseWidth = 0;
-  
-  // Display the fuel consumption on the serial monitor for debugging
-  //Serial.print("Fuel consumption: ");
-  //Serial.print(fuelConsumption);
-  //Serial.println(" ml/s");
-  
-  // Set the flag variable to true to indicate that the display needs to be updated
-  updateDisplay_flag = true;
 }
 
 // This function initializes the display and sets up the interrupts
@@ -155,12 +132,6 @@ void setup() {
   display.println("Setting up...");
   display.display();
   
-   // Set up a timer interrupt to call timerISR every second
-   timer1_attachInterrupt(timerISR);
-   timer1_enable(TIM_DIV16, TIM_EDGE, TIM_LOOP);
-   timer1_write(500000); // Set timer interval to 0.1 sec (80MHz/16/500000)
-   timer1_write(1000000); // Set timer interval to 0.1 sec (160MHz/16/500000)
-                          
    // Set up a pin interrupt to call injectorISR on every change of state of INJECTOR_PIN 
 //   pinMode(INJECTOR_PIN, INPUT_PULLUP);
    pinMode(INJECTOR_PIN, INPUT);
@@ -178,7 +149,7 @@ void setup() {
 // Update OLED display with new data
 void updateDisplay() {
 char buffer[40];
-  sprintf(buffer, "%d.%02d",(uint16_t)fuel_avg1, (uint16_t)(fuel_avg1*100)%100);
+  sprintf(buffer, "%d.%02d",(uint16_t)fuel_avg1_MLmin, (uint16_t)(fuel_avg1_MLmin*100)%100);
 
 #ifdef DRAW_TEXT_SHADOW
 //cast +1 -1 shadow first
@@ -186,7 +157,7 @@ char buffer[40];
   // Set the cursor position and print CPM value
   display.setCursor(TEXT_LPKM_X+1, TEXT_LPKM_Y-1);
   //display.print("CPM: ");
-  display.print(fuel_avg1);
+  display.print(fuel_avg1_MLmin);
   
   display.setCursor(TEXT_TIMEBASE_X+1, TEXT_TIMEBASE_Y-1);
   display.print("T: ");
@@ -198,7 +169,7 @@ char buffer[40];
   // Set the cursor position and print CPM value
   display.setCursor(TEXT_LPKM_X+1, TEXT_LPKM_Y+1);
   //display.print("CPM: ");
-  display.print(fuel_avg1);
+  display.print(fuel_avg1_MLmin);
   
   // Set the cursor position and print time base value
   display.setCursor(TEXT_TIMEBASE_X+1, TEXT_TIMEBASE_Y+1);
@@ -211,7 +182,7 @@ char buffer[40];
   // Set the cursor position and print CPM value
   display.setCursor(TEXT_LPKM_X-1, TEXT_LPKM_Y+1);
   //display.print("CPM: ");
-  display.print(fuel_avg1);
+  display.print(fuel_avg1_MLmin);
   
   // Set the cursor position and print time base value
   display.setCursor(TEXT_TIMEBASE_X-1, TEXT_TIMEBASE_Y+1);
@@ -276,8 +247,7 @@ void updateGraph() {
 #endif // OPTIMIZED_MAX_SEARCH
   
   // Add the new data to the rightmost pixel
-//  graphData[graphW - 1] = counts_copy;
-  graphData[graphW - 1] = fuel_avg1;
+  graphData[graphW - 1] = fuel_avg1_MLmin;
 
 #ifndef OPTIMIZED_MAX_SEARCH
   // Find the maximum value in the graph data
@@ -323,54 +293,47 @@ void drawGraph() {
 void loop() {
   uint32_t currentMillis = millis(); // Get current time in milliseconds
   
-  // Update counts per second every interval
+  static uint32_t last_interval_micros = 0;
+  // Update fuel consumption every 'interval'
   if (currentMillis - previousMillis >= interval) {
+    uint32_t current_micros = micros();
+    uint32_t interval_duration = current_micros - last_interval_micros;
+    if (interval_duration == 0) return;
+    last_interval_micros = current_micros;
     previousMillis = currentMillis; // Save current time
-    noInterrupts();  //disable interrupts while reading and updating counts
-    counts_copy = counts; // take snapshot of counts (total pulse width in microseconds over 'interval' ms)
-    counts = 0;       // Reset counts to zero
+    
+    noInterrupts();  //disable interrupts while reading and updating pulse width
+    pulseWidthSnapshot = totalPulseWidth; // take snapshot of total pulse width in microseconds
+    totalPulseWidth = 0;       // Reset for next interval
     interrupts();     // Enable interrupts again
     
-    // Convert counts_copy to ml/min
-    // fraction_of_time = counts_copy / (interval * 1000)
-    // ml_min = fraction_of_time * injectorFlowRate
-    float current_ml_min = (counts_copy / (float)(interval * 1000.0)) * injectorFlowRate;
+    // Convert pulseWidthSnapshot to ml/min and ml/sec
+    // duty_cycle = pulseWidthSnapshot / interval_duration
+    // ml_sec = duty_cycle * (injectorFlowRateMLmin / 60.0)
+    fuelConsumptionMLsec = (pulseWidthSnapshot / (float)interval_duration) * (injectorFlowRateMLmin / 60.0);
+    float current_ml_min = (pulseWidthSnapshot / (float)interval_duration) * injectorFlowRateMLmin;
 
-    // fuel_avg1 is an exponential moving average of ml/min
-    fuel_avg1 = (fuel_avg1 * 9.0 + current_ml_min) / 10.0;
-    
-//    Serial.print("CPM: "); // Print counts per minute to serial monitor
-//    Serial.println(cpm);
-//    if (currentMillis - previousMillis_serial >= SERIAL_OUT_INTERVAL) { // Check if interval has passed
-//      previousMillis_serial = currentMillis; // Update previous time for serial out
-//      Serial.print(currentMillis); // Print timestamp in millis
-//      Serial.print(","); // Print comma separator
-//      Serial.print(cpm_avg1,3); // Print short term average
-//      Serial.print(","); // Print comma separator
-//      Serial.println(cpm_avg2,3); // Print long term average
-//      }
+    // fuel_avg1_MLmin is an exponential moving average of ml/min
+    fuel_avg1_MLmin = (fuel_avg1_MLmin * 9.0 + current_ml_min) / 10.0;
     
     knobValue = analogRead(KNOB_PIN); // Read value from knob
-    timeBase = map(knobValue, 0, 1023, 10, 1000); // Map knob value to time base in miliseconds
-    graph_interval = (uint32_t)timeBase  ; // Calculate graph interval based on time base 
+    timeBase = map(knobValue, 0, 1023, 10, 1000); // Map knob value to time base in milliseconds
+    graph_interval = (uint32_t)timeBase; // Calculate graph interval based on time base
     
-  if (currentMillis - previousMillis_graph >= graph_interval) {
-    previousMillis_graph = currentMillis; // Save current time
-                       // Clear the display buffer
-    display.clearDisplay();
-    updateGraph();     // Update rolling graph with new data    
-    drawGraph();       // Draw rolling graph on OLED display
-    Serial.println(counts_copy);
-  }
-      
-#ifdef DRAW_TEXT    
-    updateDisplay();   // Update OLED display with text  
-#endif //DRAW_TEXT
-    display.display(); // Show display buffer on screen
+    if (currentMillis - previousMillis_graph >= graph_interval) {
+        previousMillis_graph = currentMillis; // Save current time
+        // Clear the display buffer
+        display.clearDisplay();
+        updateGraph();     // Update rolling graph with new data
+        drawGraph();       // Draw rolling graph on OLED display
+        Serial.print("Fuel: "); Serial.print(fuelConsumptionMLsec); Serial.print(" ml/sec, Avg: "); Serial.print(fuel_avg1_MLmin); Serial.println(" ml/min");
 
-
- 
-  } //if 1 second interval
+        #ifdef DRAW_TEXT
+        updateDisplay();   // Update OLED display with text
+        #endif //DRAW_TEXT
+        display.display(); // Show display buffer on screen
+    }
+  } //if interval
   
 /*
     if (pulse_beep){

@@ -13,9 +13,8 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // Define some constants for the fuel consumption calculation
-#define INJECTOR_CC 200 // Injector capacity in cc/min
-#define FUEL_DENSITY 0.75 // Fuel density in g/cc
-#define SECONDS_PER_HOUR 3600 // Number of seconds in an hour
+#define INJECTOR_FLOW_RATE_MLMIN 200.0 // Injector capacity in ml/min (same as cc/min)
+#define FUEL_DENSITY 0.75 // Fuel density in g/ml
 
 // Define some variables for the rolling graph
 int graph_x = 0; // The x position of the graph
@@ -110,10 +109,10 @@ void injectorISR() {
     pulse_width = pulse_end - pulse_start;
 
     // Calculate the fuel injected in grams based on the pulse width and injector capacity and density
-    // INJECTOR_CC is cc/min. cc/sec = INJECTOR_CC / 60.
-    // g/sec = (INJECTOR_CC / 60) * FUEL_DENSITY
+    // INJECTOR_FLOW_RATE_MLMIN is ml/min. ml/sec = INJECTOR_FLOW_RATE_MLMIN / 60.
+    // g/sec = (INJECTOR_FLOW_RATE_MLMIN / 60) * FUEL_DENSITY
     // pulse_width is in microseconds. fraction of second = pulse_width / 1,000,000
-    float fuel_injected = (pulse_width / 1000000.0) * (INJECTOR_CC / 60.0) * FUEL_DENSITY;
+    float fuel_injected = (pulse_width / 1000000.0) * (INJECTOR_FLOW_RATE_MLMIN / 60.0) * FUEL_DENSITY;
 
     // Add the fuel injected to the total fuel consumed variable 
     fuel_consumed += fuel_injected;

@@ -20,21 +20,16 @@ def test_ino(ino_file, mock_dir='tests/mock'):
         lines = content.split('\n')
 
         # Forward declarations for functions defined after setup/loop
-        funcs = []
+        import re
         for line in lines:
-            line_s = line.strip()
-            if (line_s.endswith('ISR() {') or
-                line_s.endswith('Interrupt() {') or
-                line_s.endswith('drawGraph() {') or
-                line_s.endswith('calculateFuelConsumption() {') or
-                line_s.endswith('updateGraphData() {') or
-                line_s.endswith('updateDisplay() {') or
-                line_s.endswith('updateGraph() {')):
-
-                func_decl = line.split('{')[0].strip() + ';'
-                if 'ICACHE_RAM_ATTR' in func_decl:
-                    func_decl = func_decl.replace('ICACHE_RAM_ATTR', '')
-                out.write(func_decl + '\n')
+            # Match function definitions like "void someFunc() {" or "void ICACHE_RAM_ATTR someFunc() {"
+            match = re.search(r'^\s*(\w+)\s+(?:ICACHE_RAM_ATTR\s+)?(\w+)\s*\((.*?)\)\s*\{', line)
+            if match:
+                return_type = match.group(1)
+                func_name = match.group(2)
+                args = match.group(3)
+                if func_name not in ['setup', 'loop']:
+                    out.write(f"{return_type} {func_name}({args});\n")
 
         for line in lines:
             if line.strip().startswith('#include'):
