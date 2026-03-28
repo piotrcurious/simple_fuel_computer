@@ -15,7 +15,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define CAM_PIN 2 // cam position sensor pin
 #define INJ_PIN 3 // fuel injector signal pin
 #define PULSE_PER_REV 36 // number of pulses per camshaft revolution
-#define INJ_FLOW_RATE 0.1 // fuel injector flow rate in ml/ms
+#define INJ_FLOW_RATE 200.0 // fuel injector flow rate in ml/min
 #define FUEL_DENSITY 0.75 // fuel density in g/ml
 #define GRAPH_HEIGHT 16 // height of the graph area in pixels
 #define GRAPH_WIDTH 128 // width of the graph area in pixels
@@ -64,9 +64,16 @@ void calculateFuelConsumption() {
   unsigned long duration = current_time - last_calc_time;
   if (duration == 0) return;
 
+  // Set RPM to 0 if no pulses for more than 2 seconds
+  if (current_time - last_rev_time > 2000000) {
+    rpm = 0;
+  }
+
   if (rpm > 0) { // if engine is running
     inj_duty_cycle = (inj_pulse_width * 100.0) / duration; // calculate the inj duty cycle in percentage
-    fuel_consumption = (inj_pulse_width / 1000.0) * INJ_FLOW_RATE * FUEL_DENSITY / (duration / 1000000.0); // calculate the fuel consumption in g/s
+    // ml/sec = (inj_pulse_width / duration) * (INJ_FLOW_RATE / 60.0)
+    // g/sec = ml/sec * FUEL_DENSITY
+    fuel_consumption = (inj_pulse_width / (float)duration) * (INJ_FLOW_RATE / 60.0) * FUEL_DENSITY;
   } else { // if engine is not running
     inj_duty_cycle = 0; // set inj duty cycle to zero
     fuel_consumption = 0; // set fuel consumption to zero

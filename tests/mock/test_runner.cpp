@@ -32,23 +32,40 @@ void simulatePulse(int pin, uint32_t duration_us) {
 int main() {
     setup();
 
+    // Simulate 10 seconds of varying RPM/Fuel
     for (int i = 0; i < 100; i++) {
-        // Simulate some pulses (e.g., at 3000 RPM)
-        for (int p = 0; p < 10; p++) {
-            simulatePulse(2, 1000); // Pulse on pin 2
-            simulatePulse(3, 1000); // Pulse on pin 3
-            simulatePulse(4, 1000); // Pulse on pin 4
-            simulatePulse(5, 1000); // Pulse on pin 5
-            _micros += 19000;
+        // Vary pulse duration and frequency based on i
+        uint32_t pulse_len = 500 + i * 10; // 0.5ms to 1.5ms
+        uint32_t gap_len = 20000 - i * 100; // 20ms to 10ms (3000 to 6000 RPM)
+
+        // Simulate pulses for this 100ms slice
+        uint32_t slice_micros = 0;
+        while (slice_micros < 100000) {
+            simulatePulse(2, 500); // Cam pulse (simplified)
+            simulatePulse(3, pulse_len); // Injector
+            simulatePulse(4, pulse_len);
+            simulatePulse(5, pulse_len);
+
+            _micros += gap_len;
             _millis = _micros / 1000;
+            slice_micros += (pulse_len + gap_len);
         }
 
         if (_timer1_callback) _timer1_callback();
 
         loop();
 
+        _millis += 10; // catch up
+        _micros += 10000;
+    }
+
+    // Simulate engine stop
+    std::cout << "--- Simulating engine stop ---" << std::endl;
+    for (int i = 0; i < 30; i++) {
         _millis += 100;
         _micros += 100000;
+        if (_timer1_callback) _timer1_callback();
+        loop();
     }
 
     return 0;

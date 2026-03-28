@@ -16,11 +16,10 @@
 #define GRAPH_COLOR RGB(0, 255, 0)
 
 // Define the variables for the fuel consumption calculation
-float injectorPulseWidth; // in milliseconds
-float fuelConsumption; // in milliliters per second
-float fuelConsumptionSum; // in milliliters per second accumulated over one second
-int pulseCount; // number of pulses in one second
-unsigned long lastPulseTime; // time of the last pulse in microseconds
+volatile unsigned long pulseStart = 0; // The start time of the current pulse in microseconds
+volatile unsigned long totalPulseWidth = 0; // The total width of all pulses in one second in microseconds
+float fuelConsumption = 0; // The fuel consumption in milliliters per second
+float injectorFlowRate = 10; // The injector flow rate in milliliters per minute
 unsigned long lastSecondTime; // time of the last second in milliseconds
 
 // Define the array for storing the graph data
@@ -52,15 +51,12 @@ void setup() {
   // Initialize the injector pin as input with pullup resistor
   pinMode(INJECTOR_PIN, INPUT_PULLUP);
 
-  // Attach an interrupt to the injector pin on falling edge
-  attachInterrupt(digitalPinToInterrupt(INJECTOR_PIN), injectorInterrupt, FALLING);
+  // Attach an interrupt to the injector pin on state change
+  attachInterrupt(digitalPinToInterrupt(INJECTOR_PIN), injectorInterrupt, CHANGE);
 
   // Initialize the variables
-  injectorPulseWidth = 0;
   fuelConsumption = 0;
-  fuelConsumptionSum = 0;
-  pulseCount = 0;
-  lastPulseTime = micros();
+  totalPulseWidth = 0;
   lastSecondTime = millis();
 }
 
@@ -68,8 +64,15 @@ void setup() {
 void loop() {
   // Check if one second has passed since the last update
   if (millis() - lastSecondTime >= 1000) {
+    noInterrupts();
+    unsigned long pulseWidthSnapshot = totalPulseWidth;
+    totalPulseWidth = 0;
+    interrupts();
+
     // Calculate the average fuel consumption in the last second
-    fuelConsumption = fuelConsumptionSum / pulseCount;
+    // totalPulseWidth is in microseconds.
+    // injectorFlowRate is in ml/min. ml/sec = injectorFlowRate / 60.
+    fuelConsumption = (pulseWidthSnapshot / 1000000.0) * (injectorFlowRate / 60.0);
 
     // Print the fuel consumption to serial monitor for debugging
     Serial.print("Fuel consumption: ");
@@ -87,31 +90,17 @@ void loop() {
     drawGraph();
 
     // Reset the variables for the next second
-    fuelConsumptionSum = 0;
-    pulseCount = 0;
     lastSecondTime = millis();
   }
 }
 
 // Interrupt function for the injector signal
 void injectorInterrupt() {
-  // Get the current time in microseconds
-  unsigned long currentTime = micros();
-
-  // Calculate the pulse width in milliseconds
-  injectorPulseWidth = (currentTime - lastPulseTime) / 1000.0;
-
-  // Update the last pulse time with the current time
-  lastPulseTime = currentTime;
-
-  // Calculate the fuel consumption in milliliters per pulse using a constant factor of 0.01 (this may vary depending on your injector specifications)
-  fuelConsumption = injectorPulseWidth * 0.01;
-
-  // Add the fuel consumption to the sum for the current second
-  fuelConsumptionSum += fuelConsumption;
-
-  // Increment the pulse count for the current second
-  pulseCount++;
+  if (digitalRead(INJECTOR_PIN) == HIGH) {
+    pulseStart = micros();
+  } else {
+    totalPulseWidth += (micros() - pulseStart);
+  }
 }
 
 // Function to draw the graph on the display
