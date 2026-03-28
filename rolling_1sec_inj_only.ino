@@ -66,6 +66,7 @@ void loop() {
 
     // Calculate the fuel consumption in grams per second
     float fuel_consumption = fuel_consumed;
+    if (fuel_consumption < 0.001) fuel_consumption = 0;
 
     // Add the fuel consumption to the graph data array and shift it to the left
     for (int i = 0; i < graph_width - 1; i++) {
@@ -81,6 +82,13 @@ void loop() {
       int line_height = map(graph_data[i], 0, graph_max, 0, graph_height);
       display.drawFastVLine(graph_x + i, graph_y + graph_height - line_height, line_height, SSD1306_WHITE);
     }
+
+    // Draw text value
+    display.setCursor(0, 0);
+    display.setTextColor(SSD1306_WHITE);
+    display.print("Fuel: ");
+    display.print(fuel_consumption, 3);
+    display.print(" g/s");
 
     // Display the updated screen
     display.display();

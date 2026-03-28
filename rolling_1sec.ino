@@ -15,7 +15,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define CAM_PIN 2 // cam position sensor pin
 #define INJ_PIN 3 // fuel injector signal pin
 #define PULSE_PER_REV 36 // number of pulses per camshaft revolution
-#define INJ_FLOW_RATE 200.0 // fuel injector flow rate in ml/min
+#define INJECTOR_FLOW_RATE_MLMIN 200.0 // fuel injector flow rate in ml/min
 #define FUEL_DENSITY 0.75 // fuel density in g/ml
 #define GRAPH_HEIGHT 16 // height of the graph area in pixels
 #define GRAPH_WIDTH 128 // width of the graph area in pixels
@@ -76,15 +76,18 @@ void calculateFuelConsumption() {
 
   if (rpm > 0) { // if engine is running
     inj_duty_cycle = (inj_pulse_width * 100.0) / duration; // calculate the inj duty cycle in percentage
-    // ml/sec = (inj_pulse_width / duration) * (INJ_FLOW_RATE / 60.0)
+    // ml/sec = (inj_pulse_width / duration) * (INJECTOR_FLOW_RATE_MLMIN / 60.0)
     // g/sec = ml/sec * FUEL_DENSITY
-    fuel_consumption = (inj_pulse_width / (float)duration) * (INJ_FLOW_RATE / 60.0) * FUEL_DENSITY;
+    fuel_consumption = (inj_pulse_width / (float)duration) * (INJECTOR_FLOW_RATE_MLMIN / 60.0) * FUEL_DENSITY;
     fuel_smoothed = (fuel_smoothed * 0.8) + (fuel_consumption * 0.2);
   } else { // if engine is not running
     inj_duty_cycle = 0; // set inj duty cycle to zero
     fuel_consumption = 0; // set fuel consumption to zero
-    fuel_smoothed = 0;
-    rpm_smoothed = 0;
+    // Faster decay for smoothed values when engine is off
+    fuel_smoothed = fuel_smoothed * 0.5;
+    if (fuel_smoothed < 0.001) fuel_smoothed = 0;
+    rpm_smoothed = rpm_smoothed * 0.5;
+    if (rpm_smoothed < 1) rpm_smoothed = 0;
   }
   inj_pulse_width = 0;
   last_calc_time = current_time;

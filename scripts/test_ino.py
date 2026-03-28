@@ -2,25 +2,28 @@
 import subprocess
 import os
 import sys
+import re
 
 def test_ino(ino_file, mock_dir='tests/mock'):
     test_cpp = f"tests/test_{os.path.basename(ino_file)}.cpp"
     test_bin = f"tests/test_{os.path.basename(ino_file)}"
 
+    with open(ino_file, 'r') as f:
+        ino_content = f.read()
+
+    has_ssd1306 = 'Adafruit_SSD1306 display' in ino_content
+    has_bluedisplay = 'BlueDisplay myDisplay' in ino_content
+
     with open(test_cpp, 'w') as out:
         # Include mocks
         out.write(f'#include "Arduino.h"\n')
-        if 'Adafruit_SSD1306' in open(ino_file).read():
+        if 'Adafruit_SSD1306' in ino_content:
             out.write(f'#include "Adafruit_SSD1306.h"\n')
-        if 'BlueDisplay' in open(ino_file).read():
+        if 'BlueDisplay' in ino_content:
             out.write(f'#include "BlueDisplay.h"\n')
 
-        # Read INO and strip includes
-        content = open(ino_file).read()
-        lines = content.split('\n')
-
         # Forward declarations for functions defined after setup/loop
-        import re
+        lines = ino_content.split('\n')
         for line in lines:
             # Match function definitions like "void someFunc() {" or "void ICACHE_RAM_ATTR someFunc() {"
             match = re.search(r'^\s*(\w+)\s+(?:ICACHE_RAM_ATTR\s+)?(\w+)\s*\((.*?)\)\s*\{', line)
@@ -43,6 +46,11 @@ def test_ino(ino_file, mock_dir='tests/mock'):
 
     # Compile
     cmd = ['g++', '-I', mock_dir, test_cpp, '-o', test_bin]
+    if has_ssd1306:
+        cmd.append('-DHAS_SSD1306')
+    elif has_bluedisplay:
+        cmd.append('-DHAS_BLUEDISPLAY')
+
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.returncode != 0:
         print(f"Compilation failed for {ino_file}")
@@ -53,9 +61,20 @@ def test_ino(ino_file, mock_dir='tests/mock'):
     res = subprocess.run([test_bin], capture_output=True, text=True)
     print(f"Result for {ino_file}:")
     print(res.stdout[:500] + ("..." if len(res.stdout) > 500 else ""))
-    if res.stderr:
-        print("Errors:")
-        print(res.stderr)
+
+    # Process captures
+    capture_dir = f"docs/images/{os.path.basename(ino_file)}"
+    os.makedirs(capture_dir, exist_ok=True)
+    found_captures = False
+    for f in os.listdir('.'):
+        if f.startswith('output_') and f.endswith('.pbm'):
+            png_file = f.replace('.pbm', '.png')
+            subprocess.run(['python3', 'scripts/dump_to_png.py', f, f"{capture_dir}/{png_file}"])
+            os.remove(f)
+            found_captures = True
+
+    if not found_captures:
+        print(f"No captures generated for {ino_file}")
 
     # Clean up artifacts
     os.remove(test_cpp)

@@ -19,6 +19,7 @@
 volatile unsigned long pulseStart = 0; // The start time of the current pulse in microseconds
 volatile unsigned long totalPulseWidth = 0; // The total width of all pulses in the accumulation interval
 float fuelConsumptionMLsec = 0; // The fuel consumption in milliliters per second
+float fuelSmoothedMLsec = 0; // Smoothed fuel consumption
 float injectorFlowRateMLmin = 200.0; // The injector flow rate in milliliters per minute
 unsigned long lastSecondTime; // time of the last second in milliseconds
 
@@ -74,9 +75,14 @@ void loop() {
     // injectorFlowRateMLmin is in ml/min. ml/sec = injectorFlowRateMLmin / 60.
     fuelConsumptionMLsec = (pulseWidthSnapshot / 1000000.0) * (injectorFlowRateMLmin / 60.0);
 
+    // Smooth the value
+    fuelSmoothedMLsec = (fuelSmoothedMLsec * 0.7) + (fuelConsumptionMLsec * 0.3);
+    if (fuelConsumptionMLsec == 0) fuelSmoothedMLsec *= 0.5;
+    if (fuelSmoothedMLsec < 0.0001) fuelSmoothedMLsec = 0;
+
     // Print the fuel consumption to serial monitor for debugging
     Serial.print("Fuel consumption: ");
-    Serial.print(fuelConsumptionMLsec);
+    Serial.print(fuelSmoothedMLsec);
     Serial.println(" ml/s");
 
     // Shift the graph data array to the left by one position
@@ -84,7 +90,7 @@ void loop() {
       graphData[i] = graphData[i + 1];
     }
     // Update the graph data with the new value at the end
-    graphData[GRAPH_WIDTH - 1] = fuelConsumptionMLsec;
+    graphData[GRAPH_WIDTH - 1] = fuelSmoothedMLsec;
 
     // Draw the graph on the display
     drawGraph();

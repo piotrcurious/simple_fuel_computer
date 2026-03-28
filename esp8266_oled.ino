@@ -15,6 +15,7 @@ Adafruit_SSD1306 display(OLED_RESET);
 volatile unsigned long pulseStart = 0; // The start time of the current pulse in microseconds
 volatile unsigned long totalPulseWidth = 0; // The total width of all pulses in the accumulation interval
 float fuelConsumptionMLsec = 0; // The fuel consumption in milliliters per second
+float fuelSmoothedMLsec = 0; // Smoothed fuel consumption
 float injectorFlowRateMLmin = 200.0; // The injector flow rate in milliliters per minute
 
 // Declare some variables for the rolling graph display
@@ -50,7 +51,9 @@ void timerISR() {
   // totalPulseWidth is in microseconds.
   // injectorFlowRateMLmin is in ml/min. ml/sec = injectorFlowRateMLmin / 60.
   // fuelConsumptionMLsec in ml/sec = (totalPulseWidth / (float)duration) * (injectorFlowRateMLmin / 60.0);
-  fuelConsumptionMLsec = (totalPulseWidth / (float)duration) * (injectorFlowRateMLmin / 60.0);
+  float instant_fuel = (totalPulseWidth / (float)duration) * (injectorFlowRateMLmin / 60.0);
+  if (totalPulseWidth == 0) instant_fuel = 0;
+  fuelConsumptionMLsec = instant_fuel;
   
   // Reset the total pulse width for the next interval
   totalPulseWidth = 0;
@@ -103,10 +106,15 @@ void loop() {
     updateDisplay = false;
     interrupts();
 
-    Serial.print("Fuel: "); Serial.print(fuel_copy); Serial.println(" ml/sec");
+    // Smooth the value
+    fuelSmoothedMLsec = (fuelSmoothedMLsec * 0.7) + (fuel_copy * 0.3);
+    if (fuel_copy == 0) fuelSmoothedMLsec *= 0.5;
+    if (fuelSmoothedMLsec < 0.0001) fuelSmoothedMLsec = 0;
+
+    Serial.print("Fuel: "); Serial.print(fuelSmoothedMLsec); Serial.println(" ml/sec");
     
     // Draw a line on the graph representing the fuel consumption
-    display.drawLine(graphX, graphY + graphHeight - 1, graphX, graphY + graphHeight - (fuel_copy * graphScale), WHITE);
+    display.drawLine(graphX, graphY + graphHeight - 1, graphX, graphY + graphHeight - (fuelSmoothedMLsec * graphScale), WHITE);
     
     // Increment the x coordinate of the graph and wrap around if necessary
     graphX++;

@@ -322,6 +322,12 @@ void loop() {
     
     if (currentMillis - previousMillis_graph >= graph_interval) {
         previousMillis_graph = currentMillis; // Save current time
+
+        // Reset display if no fuel for a while
+        if (current_ml_min == 0 && fuel_avg1_MLmin < 0.01) {
+            fuel_avg1_MLmin = 0;
+        }
+
         // Clear the display buffer
         display.clearDisplay();
         updateGraph();     // Update rolling graph with new data

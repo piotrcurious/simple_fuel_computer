@@ -2,6 +2,7 @@
 #include "Arduino.h"
 #include <map>
 #include "Adafruit_SSD1306.h"
+#include "BlueDisplay.h"
 #include <vector>
 
 // External declarations for setup and loop
@@ -39,6 +40,9 @@ struct SimulationProfile {
     float end_pulse_ms;
 };
 
+// Pointer to the active display for frame capturing
+Adafruit_GFX* _active_display = nullptr;
+
 void runProfile(const SimulationProfile& profile) {
     std::cout << "--- Starting Profile: " << profile.name << " ---" << std::endl;
     uint32_t profile_start_ms = _millis;
@@ -72,9 +76,24 @@ void runProfile(const SimulationProfile& profile) {
         if (_timer1_callback) _timer1_callback();
         loop();
     }
+
+    // Capture frame at end of profile
+    if (_active_display) {
+        std::string filename = "output_" + profile.name + ".pbm";
+        for(auto &c : filename) if(c == ' ') c = '_';
+        _active_display->savePBM(filename.c_str());
+    }
 }
 
 int main() {
+#if defined(HAS_SSD1306)
+    extern Adafruit_SSD1306 display;
+    _active_display = &display;
+#elif defined(HAS_BLUEDISPLAY)
+    extern BlueDisplay myDisplay;
+    _active_display = &myDisplay;
+#endif
+
     setup();
 
     std::vector<SimulationProfile> profiles = {
