@@ -18,20 +18,20 @@ Simple fuel consumption computer for various microcontrollers (ESP32, ESP8266).
 ## Simulated Previews
 Below are captures from the mock Arduino environment during various simulation phases:
 
-### ESP8266 Fuel Computer (`fuel_computer_esp8266_oled_rollin.ino`)
-| Idling | Accelerating | Cruising |
-| :---: | :---: | :---: |
-| ![Idling](docs/images/fuel_computer_esp8266_oled_rollin.ino/output_Idling.png) | ![Accelerating](docs/images/fuel_computer_esp8266_oled_rollin.ino/output_Accelerating.png) | ![Cruising](docs/images/fuel_computer_esp8266_oled_rollin.ino/output_Cruising.png) |
+### ESP8266 Fuel Computer (`fuel_monitor_v3.ino`)
+| Idling | Accelerating | Cruising | Decelerating | Engine Stop |
+| :---: | :---: | :---: | :---: | :---: |
+| ![Idling](docs/images/fuel_monitor_v3.ino/output_Idling.png) | ![Accelerating](docs/images/fuel_monitor_v3.ino/output_Accelerating.png) | ![Cruising](docs/images/fuel_monitor_v3.ino/output_Cruising.png) | ![Decelerating](docs/images/fuel_monitor_v3.ino/output_Decelerating.png) | ![Engine Stop](docs/images/fuel_monitor_v3.ino/output_Engine_Stop.png) |
 
 ### ESP32 BlueDisplay (`esp32_Bluedisplay_rolling.ino`)
-| Idling | Accelerating | Cruising |
-| :---: | :---: | :---: |
-| ![Idling](docs/images/esp32_Bluedisplay_rolling.ino/output_Idling.png) | ![Accelerating](docs/images/esp32_Bluedisplay_rolling.ino/output_Accelerating.png) | ![Cruising](docs/images/esp32_Bluedisplay_rolling.ino/output_Cruising.png) |
+| Idling | Accelerating | Cruising | Decelerating | Engine Stop |
+| :---: | :---: | :---: | :---: | :---: |
+| ![Idling](docs/images/esp32_Bluedisplay_rolling.ino/output_Idling.png) | ![Accelerating](docs/images/esp32_Bluedisplay_rolling.ino/output_Accelerating.png) | ![Cruising](docs/images/esp32_Bluedisplay_rolling.ino/output_Cruising.png) | ![Decelerating](docs/images/esp32_Bluedisplay_rolling.ino/output_Decelerating.png) | ![Engine Stop](docs/images/esp32_Bluedisplay_rolling.ino/output_Engine_Stop.png) |
 
 ### Combined RPM/Fuel Computer (`rolling_1sec.ino`)
-| Idling | Accelerating | Cruising |
-| :---: | :---: | :---: |
-| ![Idling](docs/images/rolling_1sec.ino/output_Idling.png) | ![Accelerating](docs/images/rolling_1sec.ino/output_Accelerating.png) | ![Cruising](docs/images/rolling_1sec.ino/output_Cruising.png) |
+| Idling | Accelerating | Cruising | Decelerating | Engine Stop |
+| :---: | :---: | :---: | :---: | :---: |
+| ![Idling](docs/images/rolling_1sec.ino/output_Idling.png) | ![Accelerating](docs/images/rolling_1sec.ino/output_Accelerating.png) | ![Cruising](docs/images/rolling_1sec.ino/output_Cruising.png) | ![Decelerating](docs/images/rolling_1sec.ino/output_Decelerating.png) | ![Engine Stop](docs/images/rolling_1sec.ino/output_Engine_Stop.png) |
 
 ## Development and Testing
 The project includes a mock Arduino environment for testing calculations and UI without physical hardware.

@@ -11,8 +11,8 @@ def test_ino(ino_file, mock_dir='tests/mock'):
     with open(ino_file, 'r') as f:
         ino_content = f.read()
 
-    has_ssd1306 = 'Adafruit_SSD1306 display' in ino_content
-    has_bluedisplay = 'BlueDisplay myDisplay' in ino_content
+    has_ssd1306 = 'Adafruit_SSD1306 display' in ino_content or 'Adafruit_SSD1306' in ino_content
+    has_bluedisplay = 'BlueDisplay myDisplay' in ino_content or 'BlueDisplay' in ino_content
 
     with open(test_cpp, 'w') as out:
         # Include mocks

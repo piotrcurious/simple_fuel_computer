@@ -18,6 +18,7 @@ voidFuncPtr _timer1_callback = nullptr;
 SerialMock Serial;
 SPI_Mock SPI;
 TwoWire Wire;
+WiFiMock WiFi;
 
 // Function to simulate a pulse on the injector pin
 void simulatePulse(int pin, uint32_t duration_us) {
@@ -74,11 +75,21 @@ void runProfile(const SimulationProfile& profile) {
             }
 
             if (_micros >= next_cam) {
+#ifdef CAM_PIN
+                simulatePulse(CAM_PIN, 100);
+#else
                 simulatePulse(2, 100);
+#endif
                 last_cam_us = _micros;
             }
             if (_micros >= next_inj) {
+#ifdef INJECTOR_PIN
+                simulatePulse(INJECTOR_PIN, (uint32_t)(current_pulse_ms * 1000));
+#elif defined(INJ_PIN)
+                simulatePulse(INJ_PIN, (uint32_t)(current_pulse_ms * 1000));
+#else
                 simulatePulse(3, (uint32_t)(current_pulse_ms * 1000));
+#endif
                 last_inj_us = _micros;
             }
         }
@@ -101,10 +112,10 @@ void runProfile(const SimulationProfile& profile) {
 int main() {
 #if defined(HAS_SSD1306)
     extern Adafruit_SSD1306 display;
-    _active_display = &display;
+    _active_display = (Adafruit_GFX*)&display;
 #elif defined(HAS_BLUEDISPLAY)
     extern BlueDisplay myDisplay;
-    _active_display = &myDisplay;
+    _active_display = (Adafruit_GFX*)&myDisplay;
 #endif
 
     setup();
