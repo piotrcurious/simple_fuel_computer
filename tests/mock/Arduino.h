@@ -119,4 +119,12 @@ namespace ESP {
     inline void restart() { exit(0); }
 }
 
+#define WIFI_OFF 0
+class WiFiMock {
+public:
+    void mode(int m) {}
+    void forceSleepBegin() {}
+};
+extern WiFiMock WiFi;
+
 #endif
